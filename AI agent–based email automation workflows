@@ -1,0 +1,106 @@
+{
+  "name": "Daily Inbox Digest Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Daily Inbox Digest\nEvery weekday at 8:00 the agent reads the last 24h of unread primary mail, prioritizes it, and emails you a digest.\n\nChange `you@example.com` in the final node.",
+        "height": 160,
+        "width": 380
+      },
+      "id": "c3000000-0000-4000-8000-000000000001",
+      "name": "Setup Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-300, -160]
+    },
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "0 8 * * 1-5" }] }
+      },
+      "id": "c3000000-0000-4000-8000-000000000002",
+      "name": "Weekdays 8AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-300, 100]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 50,
+        "simple": true,
+        "filters": { "q": "newer_than:1d is:unread category:primary" }
+      },
+      "id": "c3000000-0000-4000-8000-000000000003",
+      "name": "Get Unread Emails",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [-60, 100],
+      "credentials": { "gmailOAuth2": { "id": "REPLACE_ME", "name": "Gmail account" } }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "emails",
+        "options": {}
+      },
+      "id": "c3000000-0000-4000-8000-000000000004",
+      "name": "Aggregate",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [180, 100]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Unread emails (JSON):\\n' + JSON.stringify($json.emails.map(e => ({ id: e.id, from: e.From, subject: e.Subject, snippet: e.snippet }))) }}",
+        "options": {
+          "systemMessage": "You write a concise morning inbox digest.\n\nStructure (plain text):\n1. TOP PRIORITY – emails needing action today (sender, subject, why, suggested action)\n2. NEEDS A REPLY THIS WEEK\n3. FYI – one line each, grouped by theme\n4. SAFE TO IGNORE – count and types only\n\nBe brief and skimmable. Do not invent details beyond the provided data."
+        }
+      },
+      "id": "c3000000-0000-4000-8000-000000000005",
+      "name": "Digest Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [420, 100]
+    },
+    {
+      "parameters": {
+        "model": { "__rl": true, "mode": "list", "value": "gpt-4o" },
+        "options": { "temperature": 0.2 }
+      },
+      "id": "c3000000-0000-4000-8000-000000000006",
+      "name": "Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [420, 320],
+      "credentials": { "openAiApi": { "id": "REPLACE_ME", "name": "OpenAI account" } }
+    },
+    {
+      "parameters": {
+        "sendTo": "you@example.com",
+        "subject": "=Daily Inbox Digest – {{ $now.format('yyyy-MM-dd') }}",
+        "emailType": "text",
+        "message": "={{ $json.output }}",
+        "options": { "appendAttribution": false }
+      },
+      "id": "c3000000-0000-4000-8000-000000000007",
+      "name": "Send Digest",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [780, 100],
+      "credentials": { "gmailOAuth2": { "id": "REPLACE_ME", "name": "Gmail account" } }
+    }
+  ],
+  "connections": {
+    "Weekdays 8AM": { "main": [[{ "node": "Get Unread Emails", "type": "main", "index": 0 }]] },
+    "Get Unread Emails": { "main": [[{ "node": "Aggregate", "type": "main", "index": 0 }]] },
+    "Aggregate": { "main": [[{ "node": "Digest Agent", "type": "main", "index": 0 }]] },
+    "Chat Model": { "ai_languageModel": [[{ "node": "Digest Agent", "type": "ai_languageModel", "index": 0 }]] },
+    "Digest Agent": { "main": [[{ "node": "Send Digest", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": []
+}
